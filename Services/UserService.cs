@@ -10,6 +10,8 @@ using Microsoft.IdentityModel.Tokens;
 using WebApi.Models;
 using WebApi.Entities;
 using WebApi.Helpers;
+using WebApi.Dto;
+using AutoMapper;
 
 namespace WebApi.Services
 {
@@ -19,7 +21,9 @@ namespace WebApi.Services
         AuthenticateResponse RefreshToken(string token, string ipAddress);
         bool RevokeToken(string token, string ipAddress);
         IEnumerable<User> GetAll();
-        User GetById(int id);
+        User GetById(Guid id);
+        User Create(User user);
+
     }
 
     public class UserService : IUserService
@@ -37,7 +41,7 @@ namespace WebApi.Services
 
         public AuthenticateResponse Authenticate(AuthenticateRequest model, string ipAddress)
         {
-            var user =  _context.Users.SingleOrDefault(x => x.Username == model.Username && x.Password == model.Password);
+            var user = _context.Users.SingleOrDefault(x => x.Username == model.Username && x.Password == model.Password);
 
             // return null if user not found
             if (user == null) return null;
@@ -57,7 +61,7 @@ namespace WebApi.Services
         public AuthenticateResponse RefreshToken(string token, string ipAddress)
         {
             var user = _context.Users.SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
-            
+
             // return null if no user found with token
             if (user == null) return null;
 
@@ -84,7 +88,7 @@ namespace WebApi.Services
         public bool RevokeToken(string token, string ipAddress)
         {
             var user = _context.Users.SingleOrDefault(u => u.RefreshTokens.Any(t => t.Token == token));
-            
+
             // return false if no user found with token
             if (user == null) return false;
 
@@ -107,7 +111,7 @@ namespace WebApi.Services
             return _context.Users;
         }
 
-        public User GetById(int id)
+        public User GetById(Guid id)
         {
             return _context.Users.Find(id);
         }
@@ -120,9 +124,12 @@ namespace WebApi.Services
             var key = Encoding.ASCII.GetBytes(_appSettings.Secret);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new ClaimsIdentity(new Claim[] 
-                {
-                    new Claim(ClaimTypes.Name, user.Id.ToString())
+                Subject = new ClaimsIdentity(new Claim[]
+                {                    
+                    new Claim(JwtRegisteredClaimNames.Jti, user.Id.ToString()),
+                    new Claim(JwtRegisteredClaimNames.Email, user.Username),
+                    new Claim(JwtRegisteredClaimNames.AuthTime, user.DateOfJoning.ToString("yyyy-MM-dd")),
+                    new Claim(JwtRegisteredClaimNames.Sub, user.Username)
                 }),
                 Expires = DateTime.UtcNow.AddMinutes(15),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
@@ -133,7 +140,7 @@ namespace WebApi.Services
 
         private RefreshToken generateRefreshToken(string ipAddress)
         {
-            using(var rngCryptoServiceProvider = new RNGCryptoServiceProvider())
+            using (var rngCryptoServiceProvider = new RNGCryptoServiceProvider())
             {
                 var randomBytes = new byte[64];
                 rngCryptoServiceProvider.GetBytes(randomBytes);
@@ -145,6 +152,21 @@ namespace WebApi.Services
                     CreatedByIp = ipAddress
                 };
             }
+        }
+
+     
+        public User Create(User user)
+        {
+            var userModel = _context.Users.SingleOrDefault(x => x.Username == user.Username);
+
+            if (userModel != null)
+            {
+                throw new ArgumentException("User is already exist");
+            }            
+
+            _context.Users.Add(user);
+            _context.SaveChanges();
+            return user;
         }
     }
 }

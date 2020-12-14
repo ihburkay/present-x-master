@@ -1,9 +1,13 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using WebApi.Services;
 using WebApi.Models;
 using Microsoft.AspNetCore.Http;
 using System;
+using AutoMapper;
+using WebApi.Dto;
+using WebApi.Entities;
+using WebApi.Helpers;
 
 namespace WebApi.Controllers
 {
@@ -13,10 +17,12 @@ namespace WebApi.Controllers
     public class UsersController : ControllerBase
     {
         private IUserService _userService;
+        private IMapper _mapper;
 
-        public UsersController(IUserService userService)
+        public UsersController(IUserService userService, IMapper mapper)
         {
             _userService = userService;
+            _mapper = mapper;
         }
 
         [AllowAnonymous]
@@ -72,17 +78,20 @@ namespace WebApi.Controllers
             return Ok(users);
         }
 
-        [HttpGet("{id}")]
-        public IActionResult GetById(int id)
-        {
-            var user = _userService.GetById(id);
-            if (user == null) return NotFound();
+            [HttpGet("{id}", Name="GetById")]
+            public ActionResult <UserReadDto> GetById (Guid id)
+            {
+                    var userModel = _userService.GetById(id);
+                    if(userModel!=null)
+                    {
+                        return Ok(_mapper.Map<UserReadDto>(userModel));
+                    }
 
-            return Ok(user);
-        }
+                    return NotFound();
+            }
 
         [HttpGet("{id}/refresh-tokens")]
-        public IActionResult GetRefreshTokens(int id)
+        public IActionResult GetRefreshTokens(Guid id)
         {
             var user = _userService.GetById(id);
             if (user == null) return NotFound();
@@ -90,7 +99,25 @@ namespace WebApi.Controllers
             return Ok(user.RefreshTokens);
         }
 
-        // helper methods
+        [AllowAnonymous]
+        [HttpPost("createuser")]
+        public ActionResult<UserReadDto> CreateUser(UserCreateDto usercreateDto)
+        {
+            User responseModel= null;
+            var userModel = _mapper.Map<User>(usercreateDto);
+            try
+            {
+                responseModel = _userService.Create(userModel);
+            }
+            catch (Exception ex)
+            {
+                return Ok(new PresentXException(ex.Message));
+            }
+            var userreadto = _mapper.Map<UserReadDto>(responseModel);
+           // return Ok( CreatedAtRoute(nameof(GetById),new {Id = userreadto.Id},userreadto));
+           return Ok(userreadto);
+        }
+
 
         private void setTokenCookie(string token)
         {
